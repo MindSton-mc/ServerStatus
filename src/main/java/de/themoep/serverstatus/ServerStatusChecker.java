@@ -39,6 +39,7 @@ import java.util.concurrent.TimeUnit;
 public class ServerStatusChecker {
     private final ServerStatus plugin;
     private List<ScheduledTask> pingTask = new ArrayList<>();
+    private boolean checkApiPing = true;
     private int pingTimeout = 500;
 
     private Map<String, Boolean> statusMap = new ConcurrentHashMap<>();
@@ -50,6 +51,7 @@ public class ServerStatusChecker {
 
     public void start() {
         stop();
+        checkApiPing = plugin.getConfig().getBoolean("check-api-ping", true);
         int pingOnline = plugin.getConfig().getInt("checkinterval.online", 10);
         int pingOffline = plugin.getConfig().getInt("checkinterval.offline", 10);
         pingTimeout = plugin.getConfig().getInt("pingtimeout", 500);
@@ -118,7 +120,16 @@ public class ServerStatusChecker {
                 return;
 
             if(server.getPlayers().isEmpty()) {
-                plugin.getProxy().getScheduler().runAsync(plugin, () -> setStatus(server, isReachable(server.getSocketAddress())));
+                plugin.getProxy().getScheduler().runAsync(plugin, () -> {
+                    boolean status = isReachable(server.getSocketAddress());
+                    if (status) {
+                        setStatus(server, status);
+                    } else if (checkApiPing) {
+                        server.ping((result, error) -> setStatus(server, result != null && error == null));
+                    } else {
+                        setStatus(server, false);
+                    }
+                });
             } else {
                 setStatus(server, true);
             }
